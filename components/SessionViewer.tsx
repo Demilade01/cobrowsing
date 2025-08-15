@@ -200,12 +200,33 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
   }
 
   const handleOverlayScroll = (e: React.UIEvent) => {
-    const target = e.currentTarget as HTMLElement
-    sendAgentControl('scroll', {
-      scrollX: target.scrollLeft,
-      scrollY: target.scrollTop,
-      timestamp: Date.now()
-    })
+    // Get scroll position from the iframe content
+    const iframe = iframeRef.current
+    if (iframe && iframe.contentWindow) {
+      sendAgentControl('scroll', {
+        scrollX: iframe.contentWindow.scrollX,
+        scrollY: iframe.contentWindow.scrollY,
+        timestamp: Date.now()
+      })
+    }
+  }
+
+  // Add wheel event handler for scroll control
+  const handleOverlayWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+
+    // Calculate new scroll position
+    const iframe = iframeRef.current
+    if (iframe && iframe.contentWindow) {
+      const currentScrollY = iframe.contentWindow.scrollY
+      const newScrollY = currentScrollY + e.deltaY
+
+      sendAgentControl('scroll', {
+        scrollX: iframe.contentWindow.scrollX,
+        scrollY: newScrollY,
+        timestamp: Date.now()
+      })
+    }
   }
 
   return (
@@ -240,12 +261,26 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
                Request Snapshot
              </button>
 
-             <button
-               onClick={() => sendAgentControl('test-click', { x: 100, y: 100 })}
-               className="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 rounded"
-             >
-               Test Click
-             </button>
+                           <button
+                onClick={() => sendAgentControl('test-click', { x: 100, y: 100 })}
+                className="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 rounded"
+              >
+                Test Click
+              </button>
+
+              <button
+                onClick={() => sendAgentControl('scroll', { scrollX: 0, scrollY: 0 })}
+                className="px-3 py-1 text-sm bg-purple-100 hover:bg-purple-200 rounded"
+              >
+                Scroll Top
+              </button>
+
+              <button
+                onClick={() => sendAgentControl('scroll', { scrollX: 0, scrollY: 1000 })}
+                className="px-3 py-1 text-sm bg-purple-100 hover:bg-purple-200 rounded"
+              >
+                Scroll Down
+              </button>
 
             <button
               onClick={() => setShowEventLog(!showEventLog)}
@@ -286,12 +321,13 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
                    className="absolute inset-0 pointer-events-none"
                    style={{ zIndex: 10 }}
                  >
-                   <div
-                     className="w-full h-full pointer-events-auto"
-                     onClick={handleOverlayClick}
-                     onMouseMove={handleOverlayMouseMove}
-                     onScroll={handleOverlayScroll}
-                   />
+                                       <div
+                      className="w-full h-full pointer-events-auto"
+                      onClick={handleOverlayClick}
+                      onMouseMove={handleOverlayMouseMove}
+                      onScroll={handleOverlayScroll}
+                      onWheel={handleOverlayWheel}
+                    />
                  </div>
                </div>
             ) : (
