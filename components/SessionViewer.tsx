@@ -49,17 +49,32 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
   const [showEventLog, setShowEventLog] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const channelRef = useRef<any>(null)
+  const isSetupRef = useRef(false)
 
+  // Setup connection once on mount
   useEffect(() => {
-    setupRealtimeConnection()
+    if (!isSetupRef.current) {
+      setupRealtimeConnection()
+      isSetupRef.current = true
+    }
     return () => {
       if (channelRef.current) {
         channelRef.current.unsubscribe()
       }
+      isSetupRef.current = false
+    }
+  }, []) // Remove session.id dependency to prevent reconnections
+
+  // Handle session changes without reconnecting
+  useEffect(() => {
+    if (channelRef.current && session.id) {
+      console.log('Session changed to:', session.id)
+      // Update the session ID in the channel if needed
+      // But don't recreate the connection
     }
   }, [session.id])
 
-  const setupRealtimeConnection = () => {
+    const setupRealtimeConnection = () => {
     console.log('Setting up realtime connection for session:', session.id)
 
     // Clean up existing channel
@@ -67,11 +82,13 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
       channelRef.current.unsubscribe()
     }
 
-    // Connect to both session-specific channel and dashboard channel
+    // Use a single channel for the session
     const sessionChannel = supabase.channel(`cobrowse:${session.id}`)
+
+    // Also listen to dashboard channel as fallback
     const dashboardChannel = supabase.channel('cobrowse-dashboard')
 
-    // Listen on session channel
+    // Listen for all events on the session channel
     sessionChannel
       .on('broadcast', { event: 'snapshot' }, (payload: any) => {
         console.log('Received snapshot from session channel:', payload)
@@ -107,7 +124,7 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
       })
       .on('presence', { event: 'sync' }, () => {
         console.log('Session presence synced')
-        setIsConnected(true)
+        // Don't set isConnected here to avoid re-renders
       })
       .subscribe((status: any) => {
         console.log('Session channel status:', status)
@@ -115,26 +132,28 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
 
         // Only track presence after successful subscription
         if (status === 'SUBSCRIBED') {
-          setTimeout(() => {
-            sessionChannel.track({
-              agent_id: 'agent_1', // TODO: Get actual agent ID
-              session_id: session.id,
-              timestamp: Date.now(),
-            }).then(() => {
-              console.log('Agent presence tracked successfully')
-            }).catch((error: any) => {
-              console.error('Failed to track agent presence:', error)
-            })
-          }, 1000) // Add delay to ensure subscription is fully established
+          console.log('✅ Session channel successfully connected')
+          // Track agent presence
+          sessionChannel.track({
+            agent_id: 'agent_1',
+            session_id: session.id,
+            timestamp: Date.now(),
+          }).then(() => {
+            console.log('Agent presence tracked successfully')
+          }).catch((error: any) => {
+            console.error('Failed to track agent presence:', error)
+          })
         }
+        // Remove retry logic - let dashboard channel handle fallback
       })
 
-    // Also listen on dashboard channel for snapshots
+    // Listen on dashboard channel for snapshots (fallback)
     dashboardChannel
       .on('broadcast', { event: 'snapshot' }, (payload: any) => {
-        console.log('Received snapshot from dashboard channel:', payload)
+        console.log('Received snapshot from dashboard channel (fallback):', payload)
         const snapshotData = payload.payload || payload
         if (snapshotData.session_id === session.id) {
+          console.log('✅ Snapshot received from dashboard channel for session:', session.id)
           console.log('Snapshot data from dashboard channel:', {
             session_id: snapshotData.session_id,
             html_length: snapshotData.html?.length,
@@ -143,25 +162,15 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
           })
           setCurrentSnapshot(snapshotData)
           renderSnapshot(snapshotData)
+        } else {
+          console.log('❌ Snapshot session ID mismatch:', snapshotData.session_id, 'vs', session.id)
         }
       })
-      .on('broadcast', { event: 'visitor-action' }, (payload: any) => {
-        console.log('Received visitor action from dashboard channel:', payload)
-        const actionData = payload.payload || payload
-        if (actionData.session_id === session.id) {
-          const event: VisitorEvent = {
-            type: actionData.type,
-            target: actionData.target,
-            data: actionData.data,
-            timestamp: actionData.timestamp,
-            sequence: actionData.sequence,
-          }
-          setEvents(prev => [...prev, event])
-          handleVisitorAction(actionData)
-        }
+      .on('broadcast', { event: '*' }, (payload: any) => {
+        console.log('Dashboard channel received event:', payload.event, payload)
       })
       .subscribe((status: any) => {
-        console.log('Dashboard channel status:', status)
+        console.log('Dashboard channel status (fallback):', status)
       })
 
     channelRef.current = sessionChannel
@@ -180,6 +189,7 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
 
     console.log('Rendering snapshot...')
     console.log('HTML length:', snapshot.html?.length)
+    console.log('CSS count:', snapshot.css?.length)
 
     try {
       // Clear existing content
@@ -211,6 +221,7 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
       }
 
       console.log('✅ Snapshot rendered successfully')
+      console.log('Iframe content length:', doc.documentElement.outerHTML.length)
     } catch (error) {
       console.error('❌ Failed to render snapshot:', error)
     }
@@ -281,6 +292,7 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
           timestamp: Date.now(),
         },
       })
+      console.log('Agent control sent:', { type, data })
     } catch (error) {
       console.error('Failed to send agent control:', error)
     }

@@ -60,7 +60,15 @@ export default function Dashboard() {
           page_title: sessionData.title || 'Demo Page'
         }
         console.log('Adding session to dashboard:', newSession)
-        setSessions(prev => [...prev, newSession])
+        setSessions(prev => {
+          // Check if session already exists
+          const exists = prev.some(s => s.id === newSession.id)
+          if (exists) {
+            console.log('Session already exists, updating instead:', newSession.id)
+            return prev.map(s => s.id === newSession.id ? { ...s, ...newSession, updated_at: new Date().toISOString() } : s)
+          }
+          return [...prev, newSession]
+        })
         setLoading(false)
       })
       .on('broadcast', { event: 'session-ended' }, (payload) => {
@@ -101,32 +109,9 @@ export default function Dashboard() {
 
     const joinSession = async (session: ActiveSession) => {
     try {
-      // Join the presence channel for this session
-      const channel = supabase.channel(`cobrowse:${session.id}`)
-
-      // Subscribe to the channel first
-      await channel.subscribe()
-
-      // Then track presence
-      await channel.track({
-        agent_id: agentId,
-        session_id: session.id,
-        visitor_id: session.visitor_id,
-        url: window.location.href,
-        timestamp: Date.now(),
-        type: 'agent'
-      })
-
       // Update session with agent info
       const updatedSession = { ...session, agent_id: agentId }
       setSelectedSession(updatedSession)
-
-      // Broadcast session update
-      await channel.send({
-        type: 'broadcast',
-        event: 'session-update',
-        payload: updatedSession
-      })
 
       console.log('Joined session:', session.id)
     } catch (error) {
@@ -136,15 +121,6 @@ export default function Dashboard() {
 
     const endSession = async (sessionId: string) => {
     try {
-      // Leave the presence channel
-      const channel = supabase.channel(`cobrowse:${sessionId}`)
-
-      // Untrack presence first
-      await channel.untrack()
-
-      // Then unsubscribe
-      await channel.unsubscribe()
-
       // Update local state
       setSelectedSession(null)
       setSessions(prev => prev.filter(s => s.id !== sessionId))
