@@ -74,16 +74,173 @@ export default function DemoPage() {
           anonymizeData: true,
         })
 
-        console.log('Co-browse initialized:', cobrowse)
+                console.log('Co-browse initialized:', cobrowse)
 
         // Store the cobrowse instance globally for debugging
         ;(window as any).cobrowseInstance = cobrowse
+
+        // Listen for agent controls
+        setupAgentControlListener()
       } catch (error) {
         console.error('Failed to initialize cobrowse:', error)
       }
     } else {
       console.error('initTourCobrowse function not found on window object')
     }
+  }
+
+  const setupAgentControlListener = () => {
+    if (typeof window !== 'undefined') {
+      // Listen for agent control events from the dashboard channel
+      const channel = (window as any).supabase?.channel('cobrowse-dashboard')
+
+      if (channel) {
+        channel
+          .on('broadcast', { event: 'agent-control' }, (payload: any) => {
+            console.log('Agent control received:', payload)
+            const controlData = payload.payload || payload
+
+            if (controlData.session_id === 'demo_rcqo661fz') {
+              executeAgentControl(controlData)
+            }
+          })
+          .subscribe()
+      }
+    }
+  }
+
+  const executeAgentControl = (control: any) => {
+    console.log('Executing agent control:', control)
+
+    switch (control.type) {
+      case 'click':
+        executeClick(control.data)
+        break
+      case 'scroll':
+        executeScroll(control.data)
+        break
+      case 'input':
+        executeInput(control.data)
+        break
+      case 'mouse-move':
+        executeMouseMove(control.data)
+        break
+      default:
+        console.log('Unknown agent control type:', control.type)
+    }
+  }
+
+  const executeClick = (data: any) => {
+    // Find element at coordinates and click it
+    const element = document.elementFromPoint(data.x, data.y) as HTMLElement
+    if (element) {
+      console.log('Agent clicking element:', element)
+
+      // Show visual indicator
+      showAgentControlIndicator()
+
+      // Show agent cursor at click position
+      showAgentCursor(data.x, data.y)
+
+      // Highlight the element briefly
+      const originalOutline = element.style.outline
+      element.style.outline = '2px solid #10b981'
+      element.style.outlineOffset = '2px'
+
+      // Click the element
+      element.dispatchEvent(new MouseEvent('click', {
+        clientX: data.x,
+        clientY: data.y,
+        button: data.button || 0,
+        bubbles: true,
+        cancelable: true
+      }))
+
+      // Remove highlight after 1 second
+      setTimeout(() => {
+        element.style.outline = originalOutline
+        element.style.outlineOffset = ''
+      }, 1000)
+    }
+  }
+
+  const executeScroll = (data: any) => {
+    window.scrollTo(data.scrollX, data.scrollY)
+  }
+
+  const executeInput = (data: any) => {
+    const element = document.querySelector(data.selector)
+    if (element && element instanceof HTMLInputElement) {
+      element.value = data.value
+      element.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+  }
+
+  const executeMouseMove = (data: any) => {
+    // Show agent cursor position
+    console.log('Agent mouse position:', data.x, data.y)
+    showAgentCursor(data.x, data.y)
+  }
+
+  // Show agent cursor on the page
+  const showAgentCursor = (x: number, y: number) => {
+    let cursor = document.getElementById('agent-cursor')
+
+    if (!cursor) {
+      cursor = document.createElement('div')
+      cursor.id = 'agent-cursor'
+      cursor.style.cssText = `
+        position: fixed;
+        width: 20px;
+        height: 20px;
+        background: #10b981;
+        border: 2px solid white;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 10000;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        transition: all 0.1s ease;
+      `
+      document.body.appendChild(cursor)
+    }
+
+    cursor.style.left = x + 'px'
+    cursor.style.top = y + 'px'
+
+    // Add a subtle pulse effect
+    cursor.style.transform = 'translate(-50%, -50%) scale(1.2)'
+    setTimeout(() => {
+      cursor!.style.transform = 'translate(-50%, -50%) scale(1)'
+    }, 100)
+  }
+
+  // Add visual indicator for agent control
+  const showAgentControlIndicator = () => {
+    const indicator = document.createElement('div')
+    indicator.id = 'agent-control-indicator'
+    indicator.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 9999;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    `
+    indicator.textContent = 'Agent is controlling this page'
+    document.body.appendChild(indicator)
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+      if (indicator.parentNode) {
+        indicator.parentNode.removeChild(indicator)
+      }
+    }, 3000)
   }
 
   return (

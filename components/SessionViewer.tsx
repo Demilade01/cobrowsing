@@ -35,6 +35,8 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
   const [sessionStatus, setSessionStatus] = useState('connecting')
   const channelRef = useRef<any>(null)
   const isSetupRef = useRef(false)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const lastMouseMove = useRef(0)
 
   // Setup connection once on mount
   useEffect(() => {
@@ -154,6 +156,58 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
     }
   }
 
+  // Agent Control Handlers
+  const handleIframeLoad = () => {
+    console.log('Iframe loaded, ready for agent controls')
+  }
+
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    // Calculate the actual position in the iframe
+    const iframe = iframeRef.current
+    if (iframe) {
+      const iframeRect = iframe.getBoundingClientRect()
+      const iframeX = x - iframeRect.left
+      const iframeY = y - iframeRect.top
+
+      sendAgentControl('click', {
+        x: iframeX,
+        y: iframeY,
+        button: e.button,
+        timestamp: Date.now()
+      })
+    }
+  }
+
+    const handleOverlayMouseMove = (e: React.MouseEvent) => {
+    // Send mouse position for cursor tracking
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    // Throttle mouse move events
+    if (Date.now() - lastMouseMove.current > 50) {
+      sendAgentControl('mouse-move', {
+        x,
+        y,
+        timestamp: Date.now()
+      })
+      lastMouseMove.current = Date.now()
+    }
+  }
+
+  const handleOverlayScroll = (e: React.UIEvent) => {
+    const target = e.currentTarget as HTMLElement
+    sendAgentControl('scroll', {
+      scrollX: target.scrollLeft,
+      scrollY: target.scrollTop,
+      timestamp: Date.now()
+    })
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Header */}
@@ -179,12 +233,19 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
               </span>
             </div>
 
-            <button
-              onClick={requestSnapshot}
-              className="px-3 py-1 text-sm bg-blue-100 hover:bg-blue-200 rounded"
-            >
-              Request Snapshot
-            </button>
+                         <button
+               onClick={requestSnapshot}
+               className="px-3 py-1 text-sm bg-blue-100 hover:bg-blue-200 rounded"
+             >
+               Request Snapshot
+             </button>
+
+             <button
+               onClick={() => sendAgentControl('test-click', { x: 100, y: 100 })}
+               className="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 rounded"
+             >
+               Test Click
+             </button>
 
             <button
               onClick={() => setShowEventLog(!showEventLog)}
@@ -208,16 +269,31 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
         {/* Page Viewer - Full Width */}
         <div className="flex-1 flex flex-col">
           <div className="flex-1 relative bg-gray-100 p-4">
-            {isConnected ? (
-              <div className="w-full h-full border border-gray-300 rounded bg-white overflow-hidden">
-                {/* Live Demo Page Viewer */}
-                <iframe
-                  src="/demo"
-                  className="w-full h-full border-0"
-                  title="Live Demo Page"
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                />
-              </div>
+                         {isConnected ? (
+               <div className="w-full h-full border border-gray-300 rounded bg-white overflow-hidden relative">
+                 {/* Live Demo Page Viewer */}
+                 <iframe
+                   src="/demo"
+                   className="w-full h-full border-0"
+                   title="Live Demo Page"
+                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                   onLoad={handleIframeLoad}
+                   ref={iframeRef}
+                 />
+
+                 {/* Agent Control Overlay */}
+                 <div
+                   className="absolute inset-0 pointer-events-none"
+                   style={{ zIndex: 10 }}
+                 >
+                   <div
+                     className="w-full h-full pointer-events-auto"
+                     onClick={handleOverlayClick}
+                     onMouseMove={handleOverlayMouseMove}
+                     onScroll={handleOverlayScroll}
+                   />
+                 </div>
+               </div>
             ) : (
               <div className="w-full h-full border border-gray-300 rounded bg-white flex items-center justify-center">
                 <div className="text-center">
