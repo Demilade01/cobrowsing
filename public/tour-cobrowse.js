@@ -398,6 +398,20 @@ class TourCobrowse {
       console.error('❌ Failed to send snapshot to session channel:', error)
     }
 
+    // Also send snapshot to dashboard channel for immediate display
+    console.log('Sending snapshot to dashboard channel...')
+    const snapshotDashboardChannel = this.supabase.channel('cobrowse-dashboard')
+    try {
+      await snapshotDashboardChannel.send({
+        type: 'broadcast',
+        event: 'snapshot',
+        payload: snapshot,
+      })
+      console.log('✅ Snapshot sent to dashboard channel successfully')
+    } catch (error) {
+      console.error('❌ Failed to send snapshot to dashboard:', error)
+    }
+
     // Also send session-started event for dashboard
     try {
       await channel.send({

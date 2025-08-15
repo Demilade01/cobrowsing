@@ -67,62 +67,104 @@ export default function SessionViewer({ session, onEndSession }: SessionViewerPr
       channelRef.current.unsubscribe()
     }
 
-    const channel = supabase.channel(`cobrowse:${session.id}`)
+    // Connect to both session-specific channel and dashboard channel
+    const sessionChannel = supabase.channel(`cobrowse:${session.id}`)
+    const dashboardChannel = supabase.channel('cobrowse-dashboard')
 
-    channel
-      .on('broadcast', { event: 'snapshot' }, (payload) => {
-        console.log('Received snapshot:', payload)
+    // Listen on session channel
+    sessionChannel
+      .on('broadcast', { event: 'snapshot' }, (payload: any) => {
+        console.log('Received snapshot from session channel:', payload)
         const snapshotData = payload.payload || payload
-        console.log('Snapshot data:', {
-          session_id: snapshotData.session_id,
-          html_length: snapshotData.html?.length,
-          css_count: snapshotData.css?.length,
-          viewport: snapshotData.viewport
-        })
-        setCurrentSnapshot(snapshotData)
-        renderSnapshot(snapshotData)
-      })
-      .on('broadcast', { event: 'visitor-action' }, (payload) => {
-        console.log('Received visitor action:', payload)
-        const actionData = payload.payload || payload
-        const event: VisitorEvent = {
-          type: actionData.type,
-          target: actionData.target,
-          data: actionData.data,
-          timestamp: actionData.timestamp,
-          sequence: actionData.sequence,
+        if (snapshotData.session_id === session.id) {
+          console.log('Snapshot data:', {
+            session_id: snapshotData.session_id,
+            html_length: snapshotData.html?.length,
+            css_count: snapshotData.css?.length,
+            viewport: snapshotData.viewport
+          })
+          setCurrentSnapshot(snapshotData)
+          renderSnapshot(snapshotData)
         }
-        setEvents(prev => [...prev, event])
-        handleVisitorAction(actionData)
       })
-      .on('broadcast', { event: '*' }, (payload) => {
-        console.log('Received broadcast event:', payload)
+      .on('broadcast', { event: 'visitor-action' }, (payload: any) => {
+        console.log('Received visitor action from session channel:', payload)
+        const actionData = payload.payload || payload
+        if (actionData.session_id === session.id) {
+          const event: VisitorEvent = {
+            type: actionData.type,
+            target: actionData.target,
+            data: actionData.data,
+            timestamp: actionData.timestamp,
+            sequence: actionData.sequence,
+          }
+          setEvents(prev => [...prev, event])
+          handleVisitorAction(actionData)
+        }
+      })
+      .on('broadcast', { event: '*' }, (payload: any) => {
+        console.log('Received broadcast event from session channel:', payload)
       })
       .on('presence', { event: 'sync' }, () => {
-        console.log('Presence synced')
+        console.log('Session presence synced')
         setIsConnected(true)
       })
-      .subscribe((status) => {
-        console.log('Channel status:', status)
+      .subscribe((status: any) => {
+        console.log('Session channel status:', status)
         setIsConnected(status === 'SUBSCRIBED')
 
         // Only track presence after successful subscription
         if (status === 'SUBSCRIBED') {
           setTimeout(() => {
-            channel.track({
+            sessionChannel.track({
               agent_id: 'agent_1', // TODO: Get actual agent ID
               session_id: session.id,
               timestamp: Date.now(),
             }).then(() => {
               console.log('Agent presence tracked successfully')
-            }).catch((error) => {
+            }).catch((error: any) => {
               console.error('Failed to track agent presence:', error)
             })
           }, 1000) // Add delay to ensure subscription is fully established
         }
       })
 
-    channelRef.current = channel
+    // Also listen on dashboard channel for snapshots
+    dashboardChannel
+      .on('broadcast', { event: 'snapshot' }, (payload: any) => {
+        console.log('Received snapshot from dashboard channel:', payload)
+        const snapshotData = payload.payload || payload
+        if (snapshotData.session_id === session.id) {
+          console.log('Snapshot data from dashboard channel:', {
+            session_id: snapshotData.session_id,
+            html_length: snapshotData.html?.length,
+            css_count: snapshotData.css?.length,
+            viewport: snapshotData.viewport
+          })
+          setCurrentSnapshot(snapshotData)
+          renderSnapshot(snapshotData)
+        }
+      })
+      .on('broadcast', { event: 'visitor-action' }, (payload: any) => {
+        console.log('Received visitor action from dashboard channel:', payload)
+        const actionData = payload.payload || payload
+        if (actionData.session_id === session.id) {
+          const event: VisitorEvent = {
+            type: actionData.type,
+            target: actionData.target,
+            data: actionData.data,
+            timestamp: actionData.timestamp,
+            sequence: actionData.sequence,
+          }
+          setEvents(prev => [...prev, event])
+          handleVisitorAction(actionData)
+        }
+      })
+      .subscribe((status: any) => {
+        console.log('Dashboard channel status:', status)
+      })
+
+    channelRef.current = sessionChannel
   }
 
   const renderSnapshot = (snapshot: DOMSnapshot) => {

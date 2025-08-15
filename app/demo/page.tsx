@@ -56,7 +56,8 @@ export default function DemoPage() {
     })
 
     if (typeof window !== 'undefined' && (window as any).initTourCobrowse) {
-      const sessionId = 'demo_' + Math.random().toString(36).substr(2, 9)
+      // Use a consistent session ID for demo purposes
+      const sessionId = 'demo_rcqo661fz'
       setSessionId(sessionId)
 
       try {
