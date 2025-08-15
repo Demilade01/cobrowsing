@@ -67,9 +67,17 @@ export default function DemoPage() {
           sessionId: sessionId,
           visitorId: 'demo_visitor',
           enableControl: true,
+          // Add more detailed configuration
+          requireConsent: false,
+          maxSessionDuration: 60, // 60 minutes
+          rateLimit: 20, // 20 events per second
+          anonymizeData: true,
         })
 
         console.log('Co-browse initialized:', cobrowse)
+
+        // Store the cobrowse instance globally for debugging
+        ;(window as any).cobrowseInstance = cobrowse
       } catch (error) {
         console.error('Failed to initialize cobrowse:', error)
       }

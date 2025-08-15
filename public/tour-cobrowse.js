@@ -346,8 +346,8 @@ class TourCobrowse {
     this.sequence++
 
     try {
-      // Send via broadcast channel
-      const channel = this.supabase.channel(`cobrowse:${this.sessionId}`)
+      // Send via dashboard channel for better reliability
+      const channel = this.supabase.channel('cobrowse-dashboard')
       await channel.send({
         type: 'broadcast',
         event: 'visitor-action',
@@ -385,52 +385,7 @@ class TourCobrowse {
     console.log('HTML length:', snapshot.html.length)
     console.log('CSS files:', snapshot.css.length)
 
-    // Send initial snapshot to session channel
-    const channel = this.supabase.channel(`cobrowse:${this.sessionId}`)
-    try {
-      await channel.send({
-        type: 'broadcast',
-        event: 'snapshot',
-        payload: snapshot,
-      })
-      console.log('✅ Initial snapshot sent to session channel')
-    } catch (error) {
-      console.error('❌ Failed to send snapshot to session channel:', error)
-    }
-
-    // Also send snapshot to dashboard channel for immediate display
-    console.log('Sending snapshot to dashboard channel...')
-    const snapshotDashboardChannel = this.supabase.channel('cobrowse-dashboard')
-    try {
-      await snapshotDashboardChannel.send({
-        type: 'broadcast',
-        event: 'snapshot',
-        payload: snapshot,
-      })
-      console.log('✅ Snapshot sent to dashboard channel successfully')
-    } catch (error) {
-      console.error('❌ Failed to send snapshot to dashboard:', error)
-    }
-
-    // Also send session-started event for dashboard
-    try {
-      await channel.send({
-        type: 'broadcast',
-        event: 'session-started',
-        payload: {
-          session_id: this.sessionId,
-          visitor_id: this.visitorId,
-          url: window.location.href,
-          title: document.title,
-          timestamp: Date.now()
-        },
-      })
-      console.log('✅ Session-started event sent to session channel')
-    } catch (error) {
-      console.error('❌ Failed to send session-started to session channel:', error)
-    }
-
-    // Also send to dashboard channel
+    // Send session-started event to dashboard channel first
     console.log('Sending session-started to dashboard channel...')
     const dashboardChannel = this.supabase.channel('cobrowse-dashboard')
     try {
@@ -448,6 +403,18 @@ class TourCobrowse {
       console.log('✅ Session-started event sent to dashboard successfully')
     } catch (error) {
       console.error('❌ Failed to send session-started to dashboard:', error)
+    }
+
+    // Send snapshot to dashboard channel
+    try {
+      await dashboardChannel.send({
+        type: 'broadcast',
+        event: 'snapshot',
+        payload: snapshot,
+      })
+      console.log('✅ Snapshot sent to dashboard channel successfully')
+    } catch (error) {
+      console.error('❌ Failed to send snapshot to dashboard:', error)
     }
   }
 
